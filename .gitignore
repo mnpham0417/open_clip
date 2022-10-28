@@ -1,4 +1,5 @@
 logs/
+composition_experiment/wandb
 wandb/
 models/
 features/
