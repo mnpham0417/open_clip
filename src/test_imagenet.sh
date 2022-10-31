@@ -1,5 +1,5 @@
 python3 -m training.main \
     --imagenet-val /imagenet/val \
-    --model ViT-B-32  \
-    --pretrained laion400m_e32 \
+    --model RN50-quickgelu  \
+    --pretrained yfcc15m \
     --batch-size 256

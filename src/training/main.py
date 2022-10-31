@@ -295,6 +295,7 @@ def main():
     if args.wandb and is_master(args):
         wandb.finish()
 
+    print(args.model, args.pretrained)
 
 def copy_codebase(args):
     from shutil import copytree, ignore_patterns
