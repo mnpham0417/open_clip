@@ -43,7 +43,8 @@ class Cub2011(Dataset):
     def _check_integrity(self):
         try:
             self._load_metadata()
-        except Exception:
+        except Exception as e:
+            print(e)
             return False
 
         for index, row in self.data.iterrows():
