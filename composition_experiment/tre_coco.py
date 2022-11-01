@@ -14,8 +14,9 @@ from torch.utils.data import Dataset
 print("Starting Program")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_name = "ViT-g-14"
-pretrained = "laion2b_s12b_b42k"
+# device = torch.device("cpu")
+model_name = "ViT-B-16"
+pretrained = "laion400m_e32"
 model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
 model.eval()
 
@@ -25,7 +26,7 @@ path2data_test = "/coco/val2017"
 path2json_test = "/coco/annotations/instances_val2017.json"
 
 coco_train = dset.CocoDetection(root = path2data_train,
-                                annFile = path2json_train)
+                                annFile = path2json_train, transform = preprocess)
 
 coco_test = dset.CocoDetection(root = path2data_test,
                                 annFile = path2json_test)
@@ -53,35 +54,19 @@ def test(compose_net, test_loader, device):
             target_emb = target_emb.to(device) 
 
             #get the output of the composition network
-            out = compose_net(target_emb).squeeze(1) # 10x512
+            out = compose_net(target_emb).squeeze(1) 
             
             #calculate the loss
-            loss = loss_fn(img_emb, out, torch.ones(img_emb.shape[0]).to(device)) # 10x1
+            loss = loss_fn(img_emb, out, torch.ones(img_emb.shape[0]).to(device)) 
 
             total_loss += loss.item()
 
     return total_loss / len(test_loader)
 
-# class_all_features = list()
-# class_all_features_index = {}
-# for i, c in enumerate(class_all):
-#     text = open_clip.tokenize(["a photo of " + c]).to(device)
-#     text_features = model.encode_text(text)
-#     text_features /= text_features.norm(dim=-1, keepdim=True) # 1x512
-#     text_features = text_features.cpu()
-#     #add 0 to the end of the vector
-#     text_features_concat = torch.cat((text_features, torch.zeros(1, 1)), dim=1) # 1x513
-#     class_all_features.append(text_features_concat.detach().numpy()) # 1x513
-
-#     #convert class_all_features to torch tensor
-#     class_all_features_index[c] = i
-# class_all_features = torch.from_numpy(np.array(class_all_features)) # 80x513
-
 #define coco_custom dataset
 class coco_custom(dset.CocoDetection):
-    def __init__(self, root, annFile, transform=None, target_transform=None, transforms=None):
-        super(coco_custom, self).__init__(root, annFile, transform, target_transform, transforms)
-        self.class_all_features = class_all_features
+    def __init__(self, root, annFile, transform=None, target_transform=None):
+        super(coco_custom, self).__init__(root, annFile, transform, target_transform)
         self.coco = self.coco
         self.ids = self.ids
 
@@ -90,105 +75,123 @@ class coco_custom(dset.CocoDetection):
 
     def __getitem__(self, index):
         img, target = super(coco_custom, self).__getitem__(index)
-        img = preprocess(img).unsqueeze(0) # 1x3x224x224
         
-        #copy class_all_features
-        class_all_features_cp = self.class_all_features.clone()
-        # class_all_features_out = []
+        while len(target) == 0:
+            index = np.random.randint(0, len(self))
+            img, target = super(coco_custom, self).__getitem__(index)
 
-        #set last element of the vector to 1 for the class corresponding to the category id
-        for i in range(len(target)):
-            # print(class_all_features_cp[class_all_features_index[self.coco.cats[target[i]['category_id']]['name']]].shape)
-            class_all_features_cp[class_all_features_index[self.coco.cats[target[i]['category_id']]['name']]][:,:] = 0
+        target_all = []
+
+        for item in target:
+            target_all.append(torch.LongTensor([item["category_id"]])) #convert to torch tensor and move to device
         
-        return img, class_all_features_cp.view(-1)
+        for i in range(95 - len(target_all)):
+            target_all.append(torch.LongTensor([-1]))
+           
+        return img, torch.Tensor(target_all)
+
+
 
 #create a custom dataset
-class coco_precompute(Dataset):
-    def __init__(self, image_emb_path, target_emb_path):
-        
+class coco_precompute(dset.CocoDetection):
+    def __init__(self, image_emb_path, target_emb_path, root, annFile, transform=None, target_transform=None):
+        super(coco_precompute, self).__init__(root, annFile, transform, target_transform)
         self.image_emb = np.load(image_emb_path, allow_pickle=True)
         self.target_emb = np.load(target_emb_path,  allow_pickle=True)
         
-    # (5000, 513)
     def __len__(self):
         return len(self.image_emb)
 
     def __getitem__(self, index):
-        img_e = self.image_emb[index] # 1x512
-        target_e = self.target_emb[index] # 1x513
+        _, target = super(coco_precompute, self).__getitem__(index)
+                   
+        target_all = []
+
+        for item in target:
+            target_all.append(torch.LongTensor([item["category_id"]])) #convert to torch tensor and move to device
+        
+        while len(target_all) == 0:
+            index = np.random.randint(0, len(self))
+            _, target = super(coco_precompute, self).__getitem__(index)
+            
+            target_all = []
+
+            for item in target:
+                target_all.append(torch.LongTensor([item["category_id"]])) #convert to torch tensor and move to device
+
+        #remove duplicates
+        target_all = list(set(target_all)) #convert to torch tensor and move to device
+
+        for i in range(95 - len(target_all)):
+            target_all.append(torch.LongTensor([-1]))
+
+        img_e = self.image_emb[index]
 
         #convert to torch tensor
-        img_e = torch.from_numpy(img_e) # 1x512
-        target_e = torch.from_numpy(target_e) # 1x513
+        img_e = torch.from_numpy(img_e) 
 
-        return img_e, target_e
+        return img_e, torch.Tensor(target_all)
 
+class CompositionNetwork(nn.Module):
+    def __init__(self, n_emb, repr_size, zero_init=False):
+        super().__init__()
+        self.emb = nn.Embedding(n_emb, repr_size)
+        if zero_init:
+            self.emb.weight.data.zero_()
 
-#custom Network
-class CompositionNetwork(torch.nn.Module):
-    def __init__(self, in_len, out_len, device):
-        super(CompositionNetwork, self).__init__()
-        #80 linear layers, one for each class
-        self.model = nn.Linear(in_len, out_len) #hard code for now
+    def forward(self, target):
+        result = []
+        for item in target:
+            result_item = [self.emb(torch.LongTensor([int(item[i].item())]).to(device)) for i in range(item.shape[0]) if item[i] != -1]
+            try:
+                result.append(torch.stack(result_item).sum(dim=0))
+            except Exception as e:
+                print(e)
+                print(target)
+                raise e
+        result = torch.stack(result, dim=0) 
 
-    def forward(self, class_features):
+        return result
 
-        out = self.model(class_features) #b x 512
-
-        return out
-
-coco_trainset = coco_precompute(image_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_train_coco_img_emb.npy", 
-                            target_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_train_coco_target.npy")
-
-coco_trainloader = torch.utils.data.DataLoader(coco_trainset, batch_size=1024, shuffle=True, num_workers=5)
+# coco_trainset = coco_precompute(image_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_train_coco_img_emb.npy", 
+#                             target_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_train_coco_target.npy", root=path2data_train, annFile=path2json_train, transform=preprocess)
 
 coco_testset = coco_precompute(image_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_test_coco_img_emb.npy", 
-                            target_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_test_coco_target.npy")
+                            target_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_test_coco_target.npy", root=path2data_train, annFile=path2json_train, transform=preprocess)
+                
+# coco_trainloader = torch.utils.data.DataLoader(coco_trainset, batch_size=1024, shuffle=True, num_workers=5)
 
-coco_testloader = torch.utils.data.DataLoader(coco_testset, batch_size=1024, shuffle=True, num_workers=5)
+coco_testloader = torch.utils.data.DataLoader(coco_testset, batch_size=256, shuffle=False, num_workers=5)
 
-in_len = coco_trainset[0][1].shape[0]
-out_len = coco_trainset[0][0].shape[0]
-
-compose_net = CompositionNetwork(in_len, out_len, device) # 80
+rep_length = coco_testset[0][0].shape[0]
+print("max class_all", max(list(coco_train.coco.cats.keys())))
+compose_net = CompositionNetwork(max(list(coco_train.coco.cats.keys()))+1, rep_length) # 80
 compose_net.to(device) # move the model parameters to CPU/GPU
 
+print("Length class", len(class_all))
 #consine similarity loss
 loss_fn = torch.nn.CosineEmbeddingLoss(reduction='mean') #reduction='sum' by default
 
-#optimizer Adam
-optimizer = torch.optim.Adam(compose_net.parameters(), lr=0.0001) #0.0001
+# optimizer Adam
+optimizer = torch.optim.Adam(compose_net.parameters(), lr=0.01) #0.0001
 
-wandb.init(project="composition_experiment", entity="mnphamx1", name=f"TRE {model_name} {pretrained} correct") #initialize wandb
+wandb.init(project="composition_experiment", entity="mnphamx1", name=f"TRE {model_name} {pretrained} correct correct") #initialize wandb
 
 print("Beginning Training")
-#iterate through all images in the dataset
-num_epoch = 20
+
+num_epoch = 50
 for epoch in range(num_epoch):
     total_loss = 0
-    for i, (img_emb, target_emb) in enumerate(coco_trainloader):
-        
-        compose_net.zero_grad() # reset the gradients
-        img_emb = img_emb.to(device)
-        target_emb = target_emb.to(device) 
+    for i, (img_emb, target) in enumerate(coco_testloader):
+        optimizer.zero_grad() #zero the gradient buffers
+        img_emb = img_emb.to(device) #move to device
 
-        #get the output of the composition network
-        out = compose_net(target_emb).squeeze(1) # 10x512
-        
-        #calculate the loss
-        loss = loss_fn(img_emb, out, torch.ones(img_emb.shape[0]).to(device)) # 10x1
-        loss.backward() # calculate the gradients
-        optimizer.step() # update the weights
+        out = compose_net(target).squeeze(1)
 
-        total_loss += loss.item()
-
-        #print statistics 
-        if(i % 10 == 0):
-            
-            print(f"Epoch: {epoch} | Iteration: {i} / {len(coco_trainloader)} | Train Loss: {total_loss / (i + 1)}") # 1x1
-            wandb.log({"Train Loss": total_loss / (i + 1)}) # 1x1
-
-test_loss = test(compose_net, coco_testloader, device)
-print(f"Test Loss: {test_loss}") # 1x1
-wandb.log({"Test Loss": test_loss}) # 1x1
+        loss = loss_fn(img_emb, out, torch.ones(1).to(device)) #b x 512
+        loss.backward() #backpropagation
+        optimizer.step() #does the update
+        total_loss += loss.item() #add the loss to the total loss
+        if i % 10 == 0:
+            print(f"Epoch: {epoch} | Iteration: {i}/{len(coco_testloader)} | Loss: {total_loss / (i+1)}")
+            wandb.log({"Loss": total_loss / (i+1)}) #log the loss to wandb  

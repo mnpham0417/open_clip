@@ -28,8 +28,8 @@ def accuracy(pred, target):
 print("Starting Program")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_name = "ViT-B-16"
-pretrained = "openai"
+model_name = "ViT-L-14"
+pretrained = "laion2b_s32b_b82k"
 model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
 model.eval()
 
@@ -52,7 +52,45 @@ text_features = model.encode_text(text)
 text_features /= text_features.norm(dim=-1, keepdim=True) # 1x512
 text_features = text_features.to(device) # 1x512
 
+print("text_features.shape: ", text_features.shape) # 1x512
+
 #iterate through the test dataloader
+# total_acc = 0
+# count = 0
+# not_found_count = 0
+# model.eval()
+# with torch.no_grad():
+#     for i, (img, target) in enumerate(tqdm(coco_test)):
+#         img = img.to(device).unsqueeze(0)
+        
+#         class_name = []
+    
+#         #get class name
+#         for item in target:
+#             class_name.append("a photo of " + coco_test.coco.cats[item['category_id']]['name']) #get the class name
+#         class_name = list(set(class_name))
+
+#         img_features = model.encode_image(img) # 1x512
+#         img_features /= img_features.norm(dim=-1, keepdim=True) # 1x512
+        
+#         pred = (img_features @ text_features.T).squeeze(0) # 1x80
+        
+#         #get top len(class_name) predictions
+#         top_pred = torch.topk(pred, len(class_name))[1] # 1xlen(class_name)
+#         top_pred_class = [class_all[i] for i in top_pred] # 1xlen(class_name)
+
+#         print("top_pred_class: ", top_pred_class) # 1xlen(class_name)
+
+#         try:
+#             accuracy_score = accuracy(top_pred_class, class_name) # 1x1
+#             count += 1
+#         except:
+#             not_found_count += 1
+#         total_acc += accuracy_score
+    
+#     print("Average accuracy: ", total_acc / count) # 1x1
+#     print("Not found count: ", not_found_count) # 1x1
+
 total_acc = 0
 count = 0
 not_found_count = 0
@@ -62,6 +100,7 @@ with torch.no_grad():
         img = img.to(device).unsqueeze(0)
         
         class_name = []
+    
         #get class name
         for item in target:
             class_name.append("a photo of " + coco_test.coco.cats[item['category_id']]['name']) #get the class name
@@ -75,12 +114,15 @@ with torch.no_grad():
         #get top len(class_name) predictions
         top_pred = torch.topk(pred, len(class_name))[1] # 1xlen(class_name)
         top_pred_class = [class_all[i] for i in top_pred] # 1xlen(class_name)
+
         try:
             accuracy_score = accuracy(top_pred_class, class_name) # 1x1
             count += 1
         except:
             not_found_count += 1
-        total_acc += accuracy_score
+        if(accuracy_score == 1):
+            total_acc += 1
+        # total_acc += accuracy_score
     
     print("Average accuracy: ", total_acc / count) # 1x1
     print("Not found count: ", not_found_count) # 1x1
