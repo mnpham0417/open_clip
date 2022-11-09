@@ -3,7 +3,9 @@ import pandas as pd
 from torchvision.datasets.folder import default_loader
 from torchvision.datasets.utils import download_url
 from torch.utils.data import Dataset
-
+import torch
+from tqdm import tqdm
+import numpy as np
 
 class Cub2011(Dataset):
     base_folder = 'CUB_200_2011/images'
@@ -31,10 +33,15 @@ class Cub2011(Dataset):
                                          sep=' ', names=['img_id', 'target'])
         train_test_split = pd.read_csv(os.path.join(self.root, 'CUB_200_2011', 'train_test_split.txt'),
                                        sep=' ', names=['img_id', 'is_training_img'])
-
+        image_attributes = pd.read_csv(os.path.join(self.root, 'CUB_200_2011', 'attributes', 'image_attribute_labels.txt'),
+                                        sep=' ', names=['img_id', 'attribute_id', 'is_present', 'certainty_id', 'time'])
         data = images.merge(image_class_labels, on='img_id')
         self.data = data.merge(train_test_split, on='img_id')
+        self.image_attributes = image_attributes
 
+        #image attribute start from 1, so shift to 0
+        self.image_attributes.attribute_id = self.image_attributes.attribute_id - 1
+        print("Line 44")
         if self.train:
             self.data = self.data[self.data.is_training_img == 1]
         else:
@@ -74,8 +81,29 @@ class Cub2011(Dataset):
         path = os.path.join(self.root, self.base_folder, sample.filepath)
         target = sample.target - 1  # Targets start at 1 by default, so shift to 0
         img = self.loader(path)
-
+        img_attributes = self.image_attributes[self.image_attributes.img_id == sample.img_id]
+        img_attributes = img_attributes[img_attributes.is_present == 1].attribute_id.values.tolist()
+        
         if self.transform is not None:
             img = self.transform(img)
+        
+        #padding
+        for i in range(73-len(img_attributes)):
+            img_attributes.append(-1)
 
-        return img, target
+        img_attributes = torch.tensor(img_attributes)
+
+        return img, target, img_attributes
+
+if __name__ == '__main__':
+    root = "/scratch/mp5847/CUB_200_2011/"
+    image_attributes = pd.read_csv(os.path.join(root, 'CUB_200_2011', 'attributes', 'image_attribute_labels.txt'),
+                                        sep=' ', names=['img_id', 'attribute_id', 'is_present', 'certainty_id', 'time'])
+
+    #iterate through each row
+    for index, row in tqdm(image_attributes.iterrows(), total=image_attributes.shape[0]):
+        #randomly flip the is_present value
+        image_attributes.loc[index, 'is_present'] = np.random.randint(0,2)
+
+    #save the new file
+    image_attributes.to_csv(os.path.join(root, 'CUB_200_2011', 'attributes', 'image_attribute_labels_random.txt'), sep=' ', index=False, header=False)

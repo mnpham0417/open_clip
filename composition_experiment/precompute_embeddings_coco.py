@@ -14,10 +14,12 @@ from torch.utils.data import Dataset
 print("Starting Program")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_name = "ViT-H-14"
-pretrained = "laion2b_s32b_b79k"
-model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
+model_name = "RN50"
+pretrained = "/scratch/mp5847/ben_ckpt/iclr-caption-paper/yfcc-intlab-ours-strict-2_2m.pt"
+model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device, jit=True)
 model.eval()
+
+pretrained = "yfcc-intlab-ours-strict-2_2m"
 
 path2data_train = "/coco/train2017"
 path2json_train = "/coco/annotations/instances_train2017.json"

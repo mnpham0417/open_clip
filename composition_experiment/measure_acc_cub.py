@@ -44,7 +44,7 @@ def accuracy(model_name, pretrained):
         
         correct = 0
         total = 0
-        for i, (image, target) in enumerate(tqdm(dataloader)):
+        for i, (image, target, _) in enumerate(tqdm(dataloader)):
             
             image = image.to(device)
             image_features = model.encode_image(image)
@@ -72,3 +72,5 @@ if __name__ == "__main__":
         pretrained = item[1]
 
         accuracy(model_name, pretrained)
+
+        
