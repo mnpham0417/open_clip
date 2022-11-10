@@ -43,8 +43,24 @@ class CsvDataset(Dataset):
         return len(self.captions)
 
     def __getitem__(self, idx):
-        images = self.transforms(Image.open(str(self.images[idx])))
-        texts = tokenize([str(self.captions[idx])])[0]
+        def try_get_image():
+            try:
+                images = self.transforms(Image.open(str(self.images[idx])))
+            except Exception as e:
+                return None
+            return images
+
+        images = None
+        while images is None:
+            images = try_get_image()
+
+        caption = str(self.captions[idx])
+
+        try:
+            texts = tokenize([caption])[0]
+        except:
+            print("This is the error making error")
+            print(caption)
         return images, texts
 
 
@@ -497,3 +513,20 @@ def get_data(args, preprocess_fns, epoch=0):
         data["imagenet-v2"] = get_imagenet(args, preprocess_fns, "v2")
 
     return data
+
+if __name__ == "__main__":
+    from tqdm import tqdm
+    dataset = pd.read_csv("/home/mp5847/src/yfcc-small-metadata.tsv", sep="\t")
+    error_count = 0
+
+    #iterate through the dataset
+    for index, row in tqdm(dataset.iterrows(), total=dataset.shape[0]):
+        img_path = row['filepath']
+        try:
+            img = Image.open(img_path)
+        except:
+            error_count += 1
+            print("Error in image: ", img_path)
+            continue
+    
+    print("Total errors: ", error_count)
