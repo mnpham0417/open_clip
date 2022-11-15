@@ -88,7 +88,7 @@ def init_distributed_device(args):
                 backend=args.dist_backend,
                 init_method=args.dist_url,
                 world_size=args.world_size,
-                rank=args.rank,
+                rank=args.rank
             )
         else:
             # DDP via torchrun, torch.distributed.launch

@@ -2,14 +2,13 @@
 
 #SBATCH --output=yfcc15m_rn50_%j.log
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=8
 #SBATCH --time=47:59:00
-#SBATCH --mem=192GB
+#SBATCH --mem=120GB
 #SBATCH --gres=gpu:4
 #SBATCH --wait-all-nodes=1
 #SBATCH --job-name=yfcc15m_rn50
-#SBATCH --mail-type=BEGIN,END
+#SBATCH --mail-type=ALL
 #SBATCH --mail-user=mp5847@nyu.edu
 
 module purge
@@ -48,26 +47,28 @@ singularity exec --nv \
     --overlay /vast/work/public/ml-datasets/imagenet/imagenet-train.sqf:ro \
 	--overlay /scratch/mp5847/singularity_containers/overlay-50G-10M.ext3:ro \
 	/scratch/work/public/singularity/cuda11.2.2-cudnn8-devel-ubuntu20.04.sif \
-	/bin/bash -c "source /ext3/env.sh; conda activate /scratch/mp5847/src/comp_exp; pwd; cd src/; \
-                    python3 -m training.main \
-                    --save-frequency 1 \
-                    --zeroshot-frequency 1 \
-                    --train-data='/vast/work/public/ml-datasets/yfcc15m/data/yfcc-small-metadata.csv'  \
-                    --csv-img-key filepath \
-                    --csv-caption-key title \
-                    --imagenet-val=/imagenet/val \
-                    --warmup 2000 \
-                    --batch-size=256 \
-                    --lr=1e-3 \
-                    --wd=0.1 \
-                    --epochs=30 \
-                    --workers=8 \
-                    --model RN50 \
-                    --report-to wandb \
-                    --name 'CLIP RN50 yfcc15m' \
-                    --csv-separator ',' \
-                    --epochs=32 \
-                    --local-loss \
-                    --gather-with-grad "
+	/bin/bash -c 'source /ext3/env.sh; conda activate /scratch/mp5847/src/comp_exp; cd /home/mp5847/src/open_clip; export PYTHONPATH="$PYTHONPATH:$PWD/src"; \
+                    torchrun --nproc_per_node 4 -m training.main \
+                        --save-frequency 1 \
+                        --zeroshot-frequency 1 \
+                        --train-data="/vast/work/public/ml-datasets/yfcc15m/data/yfcc-small-metadata.csv"  \
+                        --csv-img-key filepath \
+                        --csv-caption-key title \
+                        --imagenet-val=/imagenet/val \
+                        --warmup 2000 \
+                        --batch-size=256 \
+                        --lr=1e-3 \
+                        --wd=0.1 \
+                        --epochs=32 \
+                        --workers=8 \
+                        --model RN50 \
+                        --report-to wandb \
+                        --name "CLIP RN50 yfcc15m" \
+                        --csv-separator "," \
+                        --epochs=32 \
+                        --logs /scratch/mp5847/open-clip/logs/'
+
+
+
 
 

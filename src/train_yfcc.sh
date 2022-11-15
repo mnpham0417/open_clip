@@ -9,7 +9,7 @@ export MASTER_ADDR="$(hostname -s).hpc.nyu.edu"
 cd /home/mp5847/src/open_clip
 export PYTHONPATH="$PYTHONPATH:$PWD/src"
 
-torchrun --nproc_per_node 4 -m training.main \
+torchrun --nproc_per_node=4 -m training.main \
             --save-frequency 1 \
             --zeroshot-frequency 1 \
             --train-data='/vast/work/public/ml-datasets/yfcc15m/data/yfcc-small-metadata.csv'  \
@@ -21,11 +21,9 @@ torchrun --nproc_per_node 4 -m training.main \
             --lr=1e-3 \
             --wd=0.1 \
             --epochs=30 \
-            --workers=8 \
+            --workers=4 \
             --model RN50 \
             --report-to wandb \
             --name 'CLIP RN50 yfcc15m test' \
             --csv-separator ',' \
-            --epochs=32 \
-            --local-loss \
-            --gather-with-grad 
+            --epochs=32

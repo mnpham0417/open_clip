@@ -41,26 +41,29 @@ class CsvDataset(Dataset):
 
     def __len__(self):
         return len(self.captions)
-
+        
     def __getitem__(self, idx):
-        def try_get_image():
+        def try_get_image(idx):
             try:
                 images = self.transforms(Image.open(str(self.images[idx])))
             except Exception as e:
+                # logging.error(f'Error loading image {self.images[idx]}: {e}')
                 return None
             return images
 
         images = None
         while images is None:
-            images = try_get_image()
+            images = try_get_image(idx)
+            #random idx
+            idx = random.randint(0, len(self.images) - 1)
 
         caption = str(self.captions[idx])
 
         try:
             texts = tokenize([caption])[0]
         except:
-            print("This is the error making error")
-            print(caption)
+            # logging.error(f'Error tokenizing caption {caption}')
+            return None
         return images, texts
 
 
@@ -73,7 +76,6 @@ class SharedEpoch:
 
     def get_value(self):
         return self.shared_epoch.value
-
 
 @dataclass
 class DataInfo:
