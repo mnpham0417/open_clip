@@ -287,6 +287,25 @@ def parse_args():
     parser.add_argument(
         "--norm_gradient_clip", type=float, default=None, help="Gradient clip."
     )
+
+    #COCO
+    parser.add_argument(
+        "--coco_instances_train_path", type=str, required=True, help="COCO instances train path."
+    )
+
+    parser.add_argument(
+        "--coco_annotation_train_path", type=str, required=True, help="COCO annotation train path."
+    )
+
+    parser.add_argument(
+        "--coco_root_path", type=str, required=True, help="COCO root path."
+    )
+
+    parser.add_argument(
+        "--complement_categories_path", type=str, required=True, help="Complement categories path."
+    )
+
+
     args = parser.parse_args()
 
     # If some params are not passed, we use the default values based on model name.

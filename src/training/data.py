@@ -20,6 +20,9 @@ from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler, IterableD
 from torch.utils.data.distributed import DistributedSampler
 from webdataset.filters import _shuffle
 from webdataset.tariterators import base_plus_ext, url_opener, tar_file_expander, valid_sample
+from pycocotools.coco import COCO
+from tqdm import tqdm
+import pickle
 
 try:
     import horovod.torch as hvd
@@ -28,6 +31,78 @@ except ImportError:
 
 from open_clip import tokenize
 
+class COCODataset(Dataset):
+    def __init__(self, coco_instances_train_path, coco_annotation_train_path, coco_root_path, complement_categories_path, transforms):
+        self.coco_instances = COCO(annotation_file=coco_instances_train_path)
+        self.coco_captions = COCO(annotation_file=coco_annotation_train_path)
+        self.coco_root_path = coco_root_path
+
+        with open(complement_categories_path, "rb") as f:
+            self.complement_categories = pickle.load(f)
+
+        self.img_ids = self.coco_instances.getImgIds()
+        self.transforms = transforms
+
+    def __len__(self):
+        return len(self.img_ids)
+
+    def __getitem__(self, idx):
+        #want to return image, caption, cropped object, class of cropped object
+        
+        img_id = self.img_ids[idx]
+        img_info = self.coco_instances.loadImgs([img_id])[0]
+        img_path = os.path.join(self.coco_root_path, img_info['file_name'])
+
+        ann_caption_ids = self.coco_captions.getAnnIds(imgIds=[img_id])
+        ann_instances_ids = self.coco_instances.getAnnIds(imgIds=[img_id])
+        anns_caption = self.coco_captions.loadAnns(ann_caption_ids)
+        anns_instances = self.coco_instances.loadAnns(ann_instances_ids)
+        if(len(anns_instances) == 0):
+            return self.__getitem__(idx + 1)
+
+        captions = [ann['caption'] for ann in anns_caption]
+        #randomly select a caption
+        # caption = random.choice(captions)
+        #only select first caption
+        caption = captions[0]
+
+        img = Image.open(img_path)
+        ann_random = random.choice(anns_instances)
+        bbox = ann_random['bbox'] #x, y, w, h
+        
+        #crop image
+        cropped_img = img.crop((bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]))
+
+        img = self.transforms(img)
+        cropped_img = self.transforms(cropped_img)
+        text = tokenize([caption])[0]
+
+        cropped_img_class = self.coco_instances.loadCats([ann_random['category_id']])[0]['name']
+        cropped_img_text = tokenize([cropped_img_class])[0]
+
+        #sample negative class
+        all_ids_cp = self.coco_instances.getCatIds().copy()
+        all_ids_cp.remove(ann_random['category_id'])
+        negative_cat_item = random.choice(self.complement_categories[random.choice(all_ids_cp)])
+        negative_img_id = negative_cat_item['id']
+        negative_img_path = os.path.join(self.coco_root_path, negative_cat_item['file_name'])
+
+        negative_img = Image.open(negative_img_path)
+        negative_img_caption = random.choice(self.coco_captions.loadAnns(self.coco_captions.getAnnIds(imgIds=[negative_img_id])))
+        negative_img_text = tokenize([negative_img_caption['caption']])[0]
+        
+        neg_object = random.choice(self.coco_instances.loadAnns(self.coco_instances.getAnnIds(imgIds=[negative_img_id])))
+        neg_bbox = neg_object['bbox']
+        negative_cropped_img = negative_img.crop((neg_bbox[0], neg_bbox[1], neg_bbox[0] + neg_bbox[2], neg_bbox[1] + neg_bbox[3]))
+        negative_cropped_img_class = self.coco_instances.loadCats([neg_object['category_id']])[0]['name']
+       
+        negative_cropped_img_text = tokenize([negative_cropped_img_class])[0]
+        negative_img = self.transforms(negative_img)
+        negative_cropped_img = self.transforms(negative_cropped_img)
+        
+        return img, text, cropped_img, cropped_img_text, negative_img, negative_img_text, negative_cropped_img, negative_cropped_img_text
+
+        
 
 class CsvDataset(Dataset):
     def __init__(self, input_filename, transforms, img_key, caption_key, sep="\t"):
@@ -403,7 +478,31 @@ def get_wds_dataset(args, preprocess_img, is_train, epoch=0, floor=False):
 
     return DataInfo(dataloader=dataloader, shared_epoch=shared_epoch)
 
+#function to get COCODataset
+def get_coco_comp_dataset(args, preprocess_fns, is_train, epoch=0):
+    preprocess_train, preprocess_val = preprocess_fns
 
+    coco_dataset = COCODataset(coco_instances_train_path=args.coco_instances_train_path,
+                               coco_annotation_train_path=args.coco_annotation_train_path,
+                               coco_root_path=args.coco_root_path, complement_categories_path=args.complement_categories_path, transforms=preprocess_train)
+
+    num_samples = len(coco_dataset)
+    sampler = DistributedSampler(coco_dataset) if args.distributed and is_train else None
+    shuffle = is_train and sampler is None
+
+    dataloader = DataLoader(
+        coco_dataset,
+        batch_size=args.batch_size,
+        shuffle=shuffle,
+        num_workers=args.workers,
+        pin_memory=True,
+        sampler=sampler,
+        drop_last=is_train,
+    )
+    dataloader.num_samples = num_samples
+    dataloader.num_batches = len(dataloader)
+
+    return DataInfo(dataloader, sampler)
 def get_csv_dataset(args, preprocess_fn, is_train, epoch=0):
     input_filename = args.train_data if is_train else args.val_data
     assert input_filename
@@ -509,21 +608,37 @@ def get_data(args, preprocess_fns, epoch=0):
     if args.imagenet_v2 is not None:
         data["imagenet-v2"] = get_imagenet(args, preprocess_fns, "v2")
 
+    data["coco-comp-train"] = get_coco_comp_dataset(args, preprocess_fns, is_train=True, epoch=epoch)
+
     return data
 
 if __name__ == "__main__":
-    from tqdm import tqdm
-    dataset = pd.read_csv("/home/mp5847/src/yfcc-small-metadata.tsv", sep="\t")
-    error_count = 0
+    from torchvision import transforms
+    import open_clip
 
-    #iterate through the dataset
-    for index, row in tqdm(dataset.iterrows(), total=dataset.shape[0]):
-        img_path = row['filepath']
-        try:
-            img = Image.open(img_path)
-        except:
-            error_count += 1
-            print("Error in image: ", img_path)
-            continue
-    
-    print("Total errors: ", error_count)
+    coco_instances_train_path = '/media/mnpham/HARD_DISK_3/dataset/coco_2017/annotations_trainval2017/annotations/instances_train2017.json'
+    coco_annotation_train_path = "/media/mnpham/HARD_DISK_3/dataset/coco_2017/annotations_trainval2017/annotations/captions_train2017.json"
+    coco_root_path = "/media/mnpham/HARD_DISK_3/dataset/coco_2017/train2017"
+    complement_categories_path = "/home/mnpham/Desktop/complement_categories_dict.pkl"
+
+    model, _, preprocess = open_clip.create_model_and_transforms('RN50', pretrained='openai')
+
+    print(preprocess)
+
+    coco_dataset = COCODataset(coco_instances_train_path=coco_instances_train_path,
+                               coco_annotation_train_path=coco_annotation_train_path,
+                               coco_root_path=coco_root_path, complement_categories_path=complement_categories_path, transforms=preprocess)
+
+    for i, (img, text, cropped_img, cropped_img_text, negative_img, negative_img_text, negative_cropped_img, negative_cropped_img_text) in enumerate(coco_dataset):
+        print(img.shape)
+        print(text.shape)
+        print(cropped_img.shape)
+        print(cropped_img_text.shape)
+        print(negative_img.shape)
+        print(negative_img_text.shape)
+        print(negative_cropped_img.shape)
+        print(negative_cropped_img_text.shape)
+        
+        if i == 10:
+            break
+       

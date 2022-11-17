@@ -30,7 +30,7 @@ from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr
 from training.train import train_one_epoch, evaluate
-
+from training.h_net import *
 
 def random_seed(seed=42, rank=0):
     torch.manual_seed(seed + rank)
@@ -130,6 +130,10 @@ def main():
         image_mean=args.image_mean,
         image_std=args.image_std,
     )
+
+    #initialize hnet
+    hnet = Mike_net_dnn(1024).to(device)
+
     random_seed(args.seed, args.rank)
 
     if args.trace:
@@ -182,6 +186,7 @@ def main():
             [
                 {"params": gain_or_bias_params, "weight_decay": 0.},
                 {"params": rest_params, "weight_decay": args.wd},
+                {"params": hnet.parameters(), "weight_decay": args.wd},
             ],
             lr=args.lr,
             betas=(args.beta1, args.beta2),
@@ -262,7 +267,7 @@ def main():
         if is_master(args):
             logging.info(f'Start epoch {epoch}')
 
-        train_one_epoch(model, data, epoch, optimizer, scaler, scheduler, args, writer)
+        train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args, writer)
         completed_epoch = epoch + 1
 
         if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):

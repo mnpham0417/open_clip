@@ -17,7 +17,8 @@ from open_clip import ClipLoss
 from .distributed import is_master
 from .zero_shot import zero_shot_eval
 from .precision import get_autocast
-
+from itertools import cycle
+import torch.nn as nn
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -44,7 +45,7 @@ def unwrap_model(model):
         return model
 
 
-def train_one_epoch(model, data, epoch, optimizer, scaler, scheduler, args, tb_writer=None):
+def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args, tb_writer=None):
     device = torch.device(args.device)
     autocast = get_autocast(args.precision)
 
@@ -58,7 +59,9 @@ def train_one_epoch(model, data, epoch, optimizer, scaler, scheduler, args, tb_w
         use_horovod=args.horovod)
 
     data['train'].set_epoch(epoch)  # set epoch in process safe manner via sampler or shared_epoch
+    data['coco-comp-train'].set_epoch(epoch)  
     dataloader = data['train'].dataloader
+    dataloader_coco = data['coco-comp-train'].dataloader
     num_batches_per_epoch = dataloader.num_batches
     sample_digits = math.ceil(math.log(dataloader.num_samples + 1, 10))
 
@@ -66,24 +69,58 @@ def train_one_epoch(model, data, epoch, optimizer, scaler, scheduler, args, tb_w
     batch_time_m = AverageMeter()
     data_time_m = AverageMeter()
     end = time.time()
-    for i, batch in enumerate(dataloader):
+
+    for i, (batch, batch_coco) in enumerate(zip(cycle(dataloader), dataloader_coco)):
         step = num_batches_per_epoch * epoch + i
         
         if not args.skip_scheduler:
             scheduler(step)
 
         images, texts = batch
+        img, text, cropped_img, cropped_img_text, negative_img, negative_img_text, negative_cropped_img, negative_cropped_img_text = batch_coco
         images = images.to(device=device, non_blocking=True)
         texts = texts.to(device=device, non_blocking=True)
+
+        img = img.to(device=device, non_blocking=True)
+        text = text.to(device=device, non_blocking=True)
+        cropped_img = cropped_img.to(device=device, non_blocking=True)
+        cropped_img_text = cropped_img_text.to(device=device, non_blocking=True)
+        negative_img = negative_img.to(device=device, non_blocking=True)
+        negative_img_text = negative_img_text.to(device=device, non_blocking=True)
+        negative_cropped_img = negative_cropped_img.to(device=device, non_blocking=True)
+        negative_cropped_img_text = negative_cropped_img_text.to(device=device, non_blocking=True)
 
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
 
+        hnet_criterion = nn.BCEWithLogitsLoss()
         with autocast():
             image_features, text_features, logit_scale = model(images, texts)
             total_loss = loss(image_features, text_features, logit_scale)
 
+            # img_features, text_features, _ = model(img, text)
+            # cropped_img_features, cropped_img_text_features, _ = model(cropped_img, cropped_img_text)
+            # negative_img_features, negative_img_text_features, _ = model(negative_img, negative_img_text)
+            # negative_cropped_img_features, negative_cropped_img_text_features, _ = model(negative_cropped_img, negative_cropped_img_text)
+            
+            # batch_size = img_features.shape[0]
+            
+            # h_net_loss5 = hnet_criterion(hnet(cropped_img_features, text_features), torch.ones(batch_size, 1).to(device)) + \
+            #                 hnet_criterion(hnet(cropped_img_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
+            
+            # h_net_loss6 = hnet_criterion(hnet(cropped_img_text_features, image_features), torch.ones(batch_size, 1).to(device)) + \
+            #                 hnet_criterion(hnet(cropped_img_text_features, negative_img_features), torch.zeros(batch_size, 1).to(device))
+
+            # h_net_loss7 = hnet_criterion(hnet(cropped_img_features, image_features), torch.ones(batch_size, 1).to(device)) + \
+            #                 hnet_criterion(hnet(cropped_img_features, negative_img_features), torch.zeros(batch_size, 1).to(device))
+            
+            # h_net_loss8 = hnet_criterion(hnet(cropped_img_text_features, text_features), torch.ones(batch_size, 1).to(device)) + \
+            #                 hnet_criterion(hnet(cropped_img_text_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
+
+            # total_loss += h_net_loss5 + h_net_loss6
+
         if scaler is not None:
+            print("Using scaler")
             scaler.scale(total_loss).backward()
             if args.horovod:
                 optimizer.synchronize()
@@ -99,6 +136,7 @@ def train_one_epoch(model, data, epoch, optimizer, scaler, scheduler, args, tb_w
                 scaler.step(optimizer)
             scaler.update()
         else:
+            print("Not using scaler")
             total_loss.backward()
             if args.norm_gradient_clip is not None:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.norm_gradient_clip, norm_type=2.0)
