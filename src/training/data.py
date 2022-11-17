@@ -43,27 +43,22 @@ class CsvDataset(Dataset):
         return len(self.captions)
         
     def __getitem__(self, idx):
-        def try_get_image(idx):
+
+        while True:
             try:
                 images = self.transforms(Image.open(str(self.images[idx])))
+                caption = str(self.captions[idx])
+                texts = tokenize([caption])[0]
+                break
             except Exception as e:
-                # logging.error(f'Error loading image {self.images[idx]}: {e}')
-                return None
-            return images
+                logging.error(f'Error loading image {self.images[idx]}: {e}')
+                #random idx
+                idx = random.randint(0, len(self.images) - 1)
 
-        images = None
-        while images is None:
-            images = try_get_image(idx)
-            #random idx
-            idx = random.randint(0, len(self.images) - 1)
+        # images = self.transforms(Image.open(str(self.images[idx])))
+        # caption = str(self.captions[idx])
+        # texts = tokenize([caption])[0]
 
-        caption = str(self.captions[idx])
-
-        try:
-            texts = tokenize([caption])[0]
-        except:
-            # logging.error(f'Error tokenizing caption {caption}')
-            return None
         return images, texts
 
 
