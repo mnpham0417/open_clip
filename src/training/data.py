@@ -40,7 +40,13 @@ class COCODataset(Dataset):
         with open(complement_categories_path, "rb") as f:
             self.complement_categories = pickle.load(f)
 
-        self.img_ids = self.coco_instances.getImgIds()
+        self.img_ids = []
+        for img_id in self.coco_instances.getImgIds():
+            ann_ids = self.coco_instances.getAnnIds(imgIds=[img_id])
+            anns = self.coco_instances.loadAnns(ann_ids)
+            if(len(ann) > 0):
+                self.img_ids.append(img_id)
+        print("Number of images with objects: ", len(self.img_ids))
         self.transforms = transforms
 
     def __len__(self):
@@ -57,8 +63,9 @@ class COCODataset(Dataset):
         ann_instances_ids = self.coco_instances.getAnnIds(imgIds=[img_id])
         anns_caption = self.coco_captions.loadAnns(ann_caption_ids)
         anns_instances = self.coco_instances.loadAnns(ann_instances_ids)
-        if(len(anns_instances) == 0):
-            return self.__getitem__(idx + 1)
+        # if(len(anns_instances) == 0):
+        #     logging.error("Getting another one")
+        #     return self.__getitem__(idx + 1)
 
         captions = [ann['caption'] for ann in anns_caption]
         #randomly select a caption

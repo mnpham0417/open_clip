@@ -120,7 +120,6 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
             # total_loss += h_net_loss5 + h_net_loss6
 
         if scaler is not None:
-            print("Using scaler")
             scaler.scale(total_loss).backward()
             if args.horovod:
                 optimizer.synchronize()
@@ -136,7 +135,6 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
                 scaler.step(optimizer)
             scaler.update()
         else:
-            print("Not using scaler")
             total_loss.backward()
             if args.norm_gradient_clip is not None:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.norm_gradient_clip, norm_type=2.0)
