@@ -15,11 +15,9 @@ print("Starting Program")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_name = "RN50"
-pretrained = "/scratch/mp5847/ben_ckpt/iclr-caption-paper/yfcc-intlab-ours-strict-2_2m.pt"
-model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device, jit=True)
+pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10/checkpoints/epoch_50.pt"
+model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
 model.eval()
-
-pretrained = "yfcc-intlab-ours-strict-2_2m"
 
 path2data_train = "/coco/train2017"
 path2json_train = "/coco/annotations/instances_train2017.json"
@@ -123,8 +121,8 @@ train_img_emb_all = np.array(train_img_emb_all)
 train_class_emb_all = np.array(train_class_emb_all) 
 
 #save the embeddings
-np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_train_coco_img_emb.npy", train_img_emb_all) 
-np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_train_coco_target.npy", train_class_emb_all) 
+np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_train_coco_img_emb.npy", train_img_emb_all) 
+np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_train_coco_target.npy", train_class_emb_all) 
 
 print("Beginning Extracting Test Features")
 
@@ -145,5 +143,9 @@ test_img_emb_all = np.array(test_img_emb_all)
 test_class_emb_all = np.array(test_class_emb_all) 
 
 #save the embeddings
-np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_test_coco_img_emb.npy", test_img_emb_all)
-np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_test_coco_target.npy", test_class_emb_all) # 10x513
+# np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_test_coco_img_emb.npy", test_img_emb_all)
+# np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_test_coco_target.npy", test_class_emb_all) # 10x513
+
+#save the embeddings
+np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_test_coco_img_emb.npy", test_img_emb_all)
+np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_test_coco_target.npy", test_class_emb_all) # 10x513

@@ -83,8 +83,12 @@ print("Beginning Training")
 
 num_epoch = 50
 for epoch in range(num_epoch):
+
     total_loss = 0
     for i, (img_emb, target) in enumerate(cub_testloader):
+        print("Target")
+        print(target)
+        assert False
         optimizer.zero_grad() #zero the gradient buffers
         img_emb = img_emb.to(device) #move to device
 
