@@ -9,7 +9,7 @@ from PIL import Image
 import torch.nn as nn
 import copy
 import wandb
-from sklearn.metrics import classification_report
+from training.h_net import *
 
 def accuracy(pred, target):
     '''
@@ -30,8 +30,13 @@ print("Starting Program")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_name = "RN50"
-pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption TripletLoss(2 + 3 + 4) + ClipLoss - lambda=10/checkpoints/epoch_50.pt"
+pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption Comp Loss 3 + 4 + 5 + 6/checkpoints/epoch_29.pt"
+pretrained_hnet = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption Comp Loss 3 + 4 + 5 + 6/checkpoints/hnet_epoch_29.pt"
 model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
+hnet = Mike_net_dnn(1024)
+hnet.load_state_dict(torch.load(pretrained_hnet))
+hnet.to(device)
+hnet.eval()
 model.eval()
 
 path2data_train = "/coco/train2017"
@@ -46,20 +51,18 @@ class_all = []
 class_all_index = {}
 for i in coco_test.coco.cats.keys():
     class_all.append("a photo of " + coco_test.coco.cats[i]['name'])
-    class_all_index["a photo of " + coco_test.coco.cats[i]['name']] = i
+    class_all_index[coco_test.coco.cats[i]['name']] = i
 
 text = open_clip.tokenize(class_all).to(device)
 text_features = model.encode_text(text)
-text_features /= text_features.norm(dim=-1, keepdim=True) # 1x512
-text_features = text_features.to(device) # 1x512
+text_features /= text_features.norm(dim=-1, keepdim=True) 
+text_features = text_features.to(device) 
 
 #iterate through the test dataloader
 total_acc = 0
 count = 0
 not_found_count = 0
-model.eval()
-pred_all = []
-target_all = []
+
 with torch.no_grad():
     for i, (img, target) in enumerate(tqdm(coco_test)):
         img = img.to(device).unsqueeze(0)
@@ -70,34 +73,23 @@ with torch.no_grad():
             class_name.append("a photo of " + coco_test.coco.cats[item['category_id']]['name']) #get the class name
         class_name = list(set(class_name))
 
-        img_features = model.encode_image(img) # 1x512
-        img_features /= img_features.norm(dim=-1, keepdim=True) # 1x512
+        img_features = model.encode_image(img) # 
+        img_features /= img_features.norm(dim=-1, keepdim=True) 
         
-        pred = (img_features @ text_features.T).squeeze(0) # 1x80
-        
+        #repeat img_features
+        img_features = img_features.repeat(text_features.shape[0], 1)
+
+        score_hnet = hnet(img_features, text_features).squeeze()
+
         #get top len(class_name) predictions
-        top_pred = torch.topk(pred, len(class_name))[1] # 1xlen(class_name)
+        top_pred = torch.topk(score_hnet, len(class_name))[1] # 1xlen(class_name)
         top_pred_class = [class_all[i] for i in top_pred] # 1xlen(class_name)
-
-        # top_pred_class = []
-
-        # #randomly select len(class_name) number of classes
-        # for i in range(len(class_name)):
-        #     top_pred_class.append(class_all[np.random.randint(0, len(class_all))])
         try:
-            accuracy_score = accuracy(top_pred_class, class_name) # 1x1
-            
-            pred_all.extend([class_all_index[class_name] for class_name in top_pred_class])
-            target_all.extend([class_all_index[class_name] for class_name in class_name])
-            total_acc += accuracy_score
+            accuracy_score = accuracy(top_pred_class, class_name) 
             count += 1
-        except Exception as e:
-            # print(e)
+        except:
             not_found_count += 1
-        
+        total_acc += accuracy_score
     
-    print(model_name, pretrained)
-    print(count, not_found_count)
     print("Average accuracy: ", total_acc / count) # 1x1
     print("Not found count: ", not_found_count) # 1x1
-    print(classification_report(target_all, pred_all))

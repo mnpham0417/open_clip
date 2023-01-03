@@ -50,6 +50,8 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
     autocast = get_autocast(args.precision)
 
     model.train()
+    hnet.train()
+
     loss = ClipLoss(
         local_loss=args.local_loss,
         gather_with_grad=args.gather_with_grad,
@@ -60,8 +62,9 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
 
     data['train'].set_epoch(epoch)  # set epoch in process safe manner via sampler or shared_epoch
     data['coco-comp-train'].set_epoch(epoch)  
-    dataloader = data['train'].dataloader
-    dataloader_coco = data['coco-comp-train'].dataloader
+    # dataloader = data['train'].dataloader
+    # dataloader_coco = data['coco-comp-train'].dataloader
+    dataloader = data['coco-comp-train'].dataloader
     num_batches_per_epoch = dataloader.num_batches
     sample_digits = math.ceil(math.log(dataloader.num_samples + 1, 10))
 
@@ -70,19 +73,20 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
     data_time_m = AverageMeter()
     end = time.time()
 
-    for i, (batch, batch_coco) in enumerate(zip(cycle(dataloader), dataloader_coco)):
+    # for i, (batch, batch_coco) in enumerate(zip(cycle(dataloader), dataloader_coco)):
+    for i, batch_coco in enumerate(dataloader):
         step = num_batches_per_epoch * epoch + i
         
         if not args.skip_scheduler:
             scheduler(step)
 
-        images, texts = batch
-        img, text, cropped_img, cropped_img_text, negative_img, negative_img_text, negative_cropped_img, negative_cropped_img_text = batch_coco
+        # images, texts = batch
+        images, texts, cropped_img, cropped_img_text, negative_img, negative_img_text, negative_cropped_img, negative_cropped_img_text = batch_coco
+        # images = images.to(device=device, non_blocking=True)
+        # texts = texts.to(device=device, non_blocking=True)
+
         images = images.to(device=device, non_blocking=True)
         texts = texts.to(device=device, non_blocking=True)
-
-        img = img.to(device=device, non_blocking=True)
-        text = text.to(device=device, non_blocking=True)
         cropped_img = cropped_img.to(device=device, non_blocking=True)
         cropped_img_text = cropped_img_text.to(device=device, non_blocking=True)
         negative_img = negative_img.to(device=device, non_blocking=True)
@@ -93,17 +97,25 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
 
-        hnet_criterion = nn.BCEWithLogitsLoss()
+        # hnet_criterion = nn.BCEWithLogitsLoss()
+        triplet_loss = nn.TripletMarginLoss(margin=0.2, p=2)
         with autocast():
-            image_features, text_features, logit_scale = model(images, texts)
-            total_loss = loss(image_features, text_features, logit_scale)
+            # image_features, text_features, logit_scale = model(images, texts)
+            # total_loss = loss(image_features, text_features, logit_scale)
 
-            # img_features, text_features, _ = model(img, text)
-            # cropped_img_features, cropped_img_text_features, _ = model(cropped_img, cropped_img_text)
-            # negative_img_features, negative_img_text_features, _ = model(negative_img, negative_img_text)
-            # negative_cropped_img_features, negative_cropped_img_text_features, _ = model(negative_cropped_img, negative_cropped_img_text)
+            img_features, text_features, logit_scale = model(images, texts)
+            total_loss = loss(img_features, text_features, logit_scale)
+            cropped_img_features, cropped_img_text_features, _ = model(cropped_img, cropped_img_text)
+            negative_img_features, negative_img_text_features, _ = model(negative_img, negative_img_text)
+            negative_cropped_img_features, negative_cropped_img_text_features, _ = model(negative_cropped_img, negative_cropped_img_text)
             
             # batch_size = img_features.shape[0]
+
+            # h_net_loss3 = hnet_criterion(hnet(img_features, text_features), torch.ones(batch_size, 1).to(device)) + \
+            #             hnet_criterion(hnet(img_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
+
+            # h_net_loss4 = hnet_criterion(hnet(text_features, img_features), torch.ones(batch_size, 1).to(device)) + \
+            #             hnet_criterion(hnet(text_features, negative_img_features), torch.zeros(batch_size, 1).to(device))
             
             # h_net_loss5 = hnet_criterion(hnet(cropped_img_features, text_features), torch.ones(batch_size, 1).to(device)) + \
             #                 hnet_criterion(hnet(cropped_img_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
@@ -117,7 +129,15 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
             # h_net_loss8 = hnet_criterion(hnet(cropped_img_text_features, text_features), torch.ones(batch_size, 1).to(device)) + \
             #                 hnet_criterion(hnet(cropped_img_text_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
 
-            # total_loss += h_net_loss5 + h_net_loss6
+            # total_loss = h_net_loss3 + h_net_loss4 + h_net_loss5 + h_net_loss6 #+ h_net_loss7 + h_net_loss8
+            loss_triplet1 = triplet_loss(img_features, cropped_img_features, negative_cropped_img_features)
+            loss_triplet2 = triplet_loss(text_features, cropped_img_text_features, negative_cropped_img_text_features)
+            loss_triplet3 = triplet_loss(text_features, cropped_img_text_features, negative_cropped_img_text_features)
+            loss_triplet4 = triplet_loss(text_features, cropped_img_features, negative_cropped_img_features)
+            triplet_total_loss = loss_triplet3 + loss_triplet4
+                        
+            
+            total_loss = total_loss + 10*triplet_total_loss
 
         if scaler is not None:
             scaler.scale(total_loss).backward()

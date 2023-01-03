@@ -61,7 +61,6 @@ def gather_features(
 
     return all_image_features, all_text_features
 
-
 class ClipLoss(nn.Module):
 
     def __init__(

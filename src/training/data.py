@@ -44,7 +44,7 @@ class COCODataset(Dataset):
         for img_id in self.coco_instances.getImgIds():
             ann_ids = self.coco_instances.getAnnIds(imgIds=[img_id])
             anns = self.coco_instances.loadAnns(ann_ids)
-            if(len(ann) > 0):
+            if(len(anns) > 0):
                 self.img_ids.append(img_id)
         print("Number of images with objects: ", len(self.img_ids))
         self.transforms = transforms
@@ -63,9 +63,6 @@ class COCODataset(Dataset):
         ann_instances_ids = self.coco_instances.getAnnIds(imgIds=[img_id])
         anns_caption = self.coco_captions.loadAnns(ann_caption_ids)
         anns_instances = self.coco_instances.loadAnns(ann_instances_ids)
-        # if(len(anns_instances) == 0):
-        #     logging.error("Getting another one")
-        #     return self.__getitem__(idx + 1)
 
         captions = [ann['caption'] for ann in anns_caption]
         #randomly select a caption
@@ -74,14 +71,23 @@ class COCODataset(Dataset):
         caption = captions[0]
 
         img = Image.open(img_path)
-        ann_random = random.choice(anns_instances)
+        while True:
+            ann_random = random.choice(anns_instances)
+            area = ann_random['area']
+            if(area > 0):
+                break
         bbox = ann_random['bbox'] #x, y, w, h
-        
+        x, y, w, h = bbox
+        x, y, w, h = math.floor(x), math.floor(y), math.ceil(w), math.ceil(h)
         #crop image
-        cropped_img = img.crop((bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]))
+        cropped_img = img.crop((x, y, x+w, y+h))
 
         img = self.transforms(img)
-        cropped_img = self.transforms(cropped_img)
+        try:
+            cropped_img = self.transforms(cropped_img)
+        except:
+            logging.error("Error cropping image")
+            print(img_id, img_path, ann_random, bbox, cropped_img.size)
         text = tokenize([caption])[0]
 
         cropped_img_class = self.coco_instances.loadCats([ann_random['category_id']])[0]['name']
@@ -98,9 +104,15 @@ class COCODataset(Dataset):
         negative_img_caption = random.choice(self.coco_captions.loadAnns(self.coco_captions.getAnnIds(imgIds=[negative_img_id])))
         negative_img_text = tokenize([negative_img_caption['caption']])[0]
         
-        neg_object = random.choice(self.coco_instances.loadAnns(self.coco_instances.getAnnIds(imgIds=[negative_img_id])))
+        while True:
+            neg_object = random.choice(self.coco_instances.loadAnns(self.coco_instances.getAnnIds(imgIds=[negative_img_id])))
+            area = neg_object['area']
+            if(area > 0):
+                break
         neg_bbox = neg_object['bbox']
-        negative_cropped_img = negative_img.crop((neg_bbox[0], neg_bbox[1], neg_bbox[0] + neg_bbox[2], neg_bbox[1] + neg_bbox[3]))
+        neg_x, neg_y, neg_w, neg_h = neg_bbox
+        neg_x, neg_y, neg_w, neg_h = math.floor(neg_bbox[0]), math.floor(neg_bbox[1]), math.ceil(neg_bbox[2]), math.ceil(neg_bbox[3])
+        negative_cropped_img = negative_img.crop((neg_x, neg_y, neg_x+neg_w, neg_y+neg_h))
         negative_cropped_img_class = self.coco_instances.loadCats([neg_object['category_id']])[0]['name']
        
         negative_cropped_img_text = tokenize([negative_cropped_img_class])[0]

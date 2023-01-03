@@ -186,7 +186,7 @@ def main():
             [
                 {"params": gain_or_bias_params, "weight_decay": 0.},
                 {"params": rest_params, "weight_decay": args.wd},
-                {"params": hnet.parameters(), "weight_decay": args.wd},
+                {"params": list(hnet.parameters()), "weight_decay": 0.},
             ],
             lr=args.lr,
             betas=(args.beta1, args.beta2),
@@ -291,6 +291,12 @@ def main():
                     checkpoint_dict,
                     os.path.join(args.checkpoint_path, f"epoch_{completed_epoch}.pt"),
                 )
+                
+                #save hnet
+                # torch.save(
+                #     hnet.state_dict(),
+                #     os.path.join(args.checkpoint_path, f"hnet_epoch_{completed_epoch}.pt"),
+                # )
             if args.save_most_recent:
                 torch.save(
                     checkpoint_dict,
