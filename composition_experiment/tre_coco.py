@@ -16,7 +16,7 @@ print("Starting Program")
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch.device("cuda")
 model_name = "RN50"
-pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption ClipLoss/checkpoints/epoch_50.pt"
+pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10/checkpoints/epoch_50.pt"
 model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
 model.eval()
 
@@ -97,6 +97,8 @@ class CompositionNetwork(nn.Module):
     def __init__(self, n_emb, repr_size, zero_init=False):
         super().__init__()
         self.emb = nn.Embedding(n_emb, repr_size)
+        self.linear1 = nn.Linear(repr_size, repr_size)
+        self.linear2 = nn.Linear(repr_size, repr_size)
         if zero_init:
             self.emb.weight.data.zero_()
 
@@ -105,7 +107,11 @@ class CompositionNetwork(nn.Module):
         for item in target:
             result_item = [self.emb(torch.LongTensor([int(item[i].item())]).to(device)) for i in range(item.shape[0]) if item[i] != -1]
             try:
-                result.append(torch.stack(result_item).sum(dim=0))
+                input_ = torch.stack(result_item).mean(dim=0)
+                input_ = nn.functional.relu(self.linear1(input_))
+                input_ = nn.functional.relu(self.linear2(input_))
+                result.append(input_)
+                # result.append(torch.stack(result_item).sum(dim=0))
             except Exception as e:
                 print(e)
                 print(target)
@@ -114,13 +120,13 @@ class CompositionNetwork(nn.Module):
 
         return result
 
-coco_trainset = coco_precompute(image_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/RN50_COCO_Caption_train_coco_img_emb.npy", 
+coco_trainset = coco_precompute(image_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/RN50_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_train_coco_img_emb.npy", 
                             root = path2data_train,
                             annFile = path2json_train)
 
 coco_trainloader = torch.utils.data.DataLoader(coco_trainset, batch_size=1024, shuffle=True, num_workers=5)
 
-coco_testset = coco_precompute(image_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/RN50_COCO_Caption_test_coco_img_emb.npy",
+coco_testset = coco_precompute(image_emb_path = f"/scratch/mp5847/precomputed_embeddings_comp_exp/RN50_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_test_coco_img_emb.npy",
                             root = path2data_test,
                             annFile = path2json_test)
                             
@@ -136,7 +142,7 @@ loss_fn = torch.nn.CosineEmbeddingLoss(reduction='mean') #reduction='sum' by def
 #optimizer Adam
 optimizer = torch.optim.Adam(compose_net.parameters(), lr=0.01) #0.0001
 
-wandb.init(project="composition_experiment", entity="mnphamx1", name=f"TRE RN50 COCO Caption ClipLoss") #initialize wandb
+wandb.init(project="composition_experiment", entity="mnphamx1", name=f"Non-linear TRE RN50 COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss") #initialize wandb
 
 print("Beginning Training")
 #iterate through all images in the dataset

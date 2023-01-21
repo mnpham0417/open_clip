@@ -32,9 +32,8 @@ def accuracy(pred, target):
 print("Starting Program")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_name = "ViT-L-14"
-# pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption TripletLoss(2 + 3 + 4) + ClipLoss - lambda=10/checkpoints/epoch_50.pt"
-pretrained = "laion2b_s32b_b82k"
+model_name = "RN50"
+pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10/checkpoints/epoch_50.pt"
 model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
 model.eval()
 

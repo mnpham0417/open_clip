@@ -66,7 +66,7 @@ class COCODataset(Dataset):
 
         captions = [ann['caption'] for ann in anns_caption]
         #randomly select a caption
-        # caption = random.choice(captions)
+        caption = random.choice(captions)
         #only select first caption
         caption = captions[0]
 
@@ -76,6 +76,7 @@ class COCODataset(Dataset):
             area = ann_random['area']
             if(area > 0):
                 break
+            print("Area is 0, trying again")
         bbox = ann_random['bbox'] #x, y, w, h
         x, y, w, h = bbox
         x, y, w, h = math.floor(x), math.floor(y), math.ceil(w), math.ceil(h)
@@ -120,9 +121,7 @@ class COCODataset(Dataset):
         negative_cropped_img = self.transforms(negative_cropped_img)
         
         return img, text, cropped_img, cropped_img_text, negative_img, negative_img_text, negative_cropped_img, negative_cropped_img_text
-
         
-
 class CsvDataset(Dataset):
     def __init__(self, input_filename, transforms, img_key, caption_key, sep="\t"):
         logging.debug(f'Loading csv data from {input_filename}.')

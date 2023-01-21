@@ -80,7 +80,6 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
         if not args.skip_scheduler:
             scheduler(step)
 
-        # images, texts = batch
         images, texts, cropped_img, cropped_img_text, negative_img, negative_img_text, negative_cropped_img, negative_cropped_img_text = batch_coco
         # images = images.to(device=device, non_blocking=True)
         # texts = texts.to(device=device, non_blocking=True)
@@ -97,7 +96,8 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
 
-        # hnet_criterion = nn.BCEWithLogitsLoss()
+        hnet_criterion = nn.BCEWithLogitsLoss()
+        #binary cross entropy loss
         triplet_loss = nn.TripletMarginLoss(margin=0.2, p=2)
         with autocast():
             # image_features, text_features, logit_scale = model(images, texts)
@@ -109,55 +109,68 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
             negative_img_features, negative_img_text_features, _ = model(negative_img, negative_img_text)
             negative_cropped_img_features, negative_cropped_img_text_features, _ = model(negative_cropped_img, negative_cropped_img_text)
             
-            # batch_size = img_features.shape[0]
+            #normalize features
+            img_features = img_features / img_features.norm(dim=-1, keepdim=True)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+            cropped_img_features = cropped_img_features / cropped_img_features.norm(dim=-1, keepdim=True)
+            negative_img_features = negative_img_features / negative_img_features.norm(dim=-1, keepdim=True)
+            negative_img_text_features = negative_img_text_features / negative_img_text_features.norm(dim=-1, keepdim=True)
 
-            # h_net_loss3 = hnet_criterion(hnet(img_features, text_features), torch.ones(batch_size, 1).to(device)) + \
-            #             hnet_criterion(hnet(img_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
+            batch_size = img_features.shape[0]
 
-            # h_net_loss4 = hnet_criterion(hnet(text_features, img_features), torch.ones(batch_size, 1).to(device)) + \
-            #             hnet_criterion(hnet(text_features, negative_img_features), torch.zeros(batch_size, 1).to(device))
+            h_net_loss3 = hnet_criterion(hnet(img_features, text_features), torch.ones(batch_size, 1).to(device)) + \
+                        hnet_criterion(hnet(img_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
+
+            h_net_loss4 = hnet_criterion(hnet(text_features, img_features), torch.ones(batch_size, 1).to(device)) + \
+                        hnet_criterion(hnet(text_features, negative_img_features), torch.zeros(batch_size, 1).to(device))
             
-            # h_net_loss5 = hnet_criterion(hnet(cropped_img_features, text_features), torch.ones(batch_size, 1).to(device)) + \
-            #                 hnet_criterion(hnet(cropped_img_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
+            h_net_loss5 = hnet_criterion(hnet(cropped_img_features, text_features), torch.ones(batch_size, 1).to(device)) + \
+                            hnet_criterion(hnet(cropped_img_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
             
-            # h_net_loss6 = hnet_criterion(hnet(cropped_img_text_features, image_features), torch.ones(batch_size, 1).to(device)) + \
-            #                 hnet_criterion(hnet(cropped_img_text_features, negative_img_features), torch.zeros(batch_size, 1).to(device))
+            h_net_loss6 = hnet_criterion(hnet(cropped_img_text_features, img_features), torch.ones(batch_size, 1).to(device)) + \
+                            hnet_criterion(hnet(cropped_img_text_features, negative_img_features), torch.zeros(batch_size, 1).to(device))
 
-            # h_net_loss7 = hnet_criterion(hnet(cropped_img_features, image_features), torch.ones(batch_size, 1).to(device)) + \
-            #                 hnet_criterion(hnet(cropped_img_features, negative_img_features), torch.zeros(batch_size, 1).to(device))
+            h_net_loss7 = hnet_criterion(hnet(cropped_img_features, img_features), torch.ones(batch_size, 1).to(device)) + \
+                            hnet_criterion(hnet(cropped_img_features, negative_img_features), torch.zeros(batch_size, 1).to(device))
             
-            # h_net_loss8 = hnet_criterion(hnet(cropped_img_text_features, text_features), torch.ones(batch_size, 1).to(device)) + \
-            #                 hnet_criterion(hnet(cropped_img_text_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
+            h_net_loss8 = hnet_criterion(hnet(cropped_img_text_features, text_features), torch.ones(batch_size, 1).to(device)) + \
+                            hnet_criterion(hnet(cropped_img_text_features, negative_img_text_features), torch.zeros(batch_size, 1).to(device))
 
-            # total_loss = h_net_loss3 + h_net_loss4 + h_net_loss5 + h_net_loss6 #+ h_net_loss7 + h_net_loss8
-            loss_triplet1 = triplet_loss(img_features, cropped_img_features, negative_cropped_img_features)
-            loss_triplet2 = triplet_loss(text_features, cropped_img_text_features, negative_cropped_img_text_features)
-            loss_triplet3 = triplet_loss(text_features, cropped_img_text_features, negative_cropped_img_text_features)
-            loss_triplet4 = triplet_loss(text_features, cropped_img_features, negative_cropped_img_features)
-            triplet_total_loss = loss_triplet3 + loss_triplet4
+            total_loss = h_net_loss3 + h_net_loss4 + h_net_loss5 + h_net_loss6 + h_net_loss7 + h_net_loss8
+            # loss_triplet1 = triplet_loss(img_features, cropped_img_features, negative_cropped_img_features)
+            # loss_triplet2 = triplet_loss(text_features, cropped_img_text_features, negative_cropped_img_text_features)
+            # loss_triplet3 = triplet_loss(text_features, cropped_img_text_features, negative_cropped_img_text_features)
+            # loss_triplet4 = triplet_loss(text_features, cropped_img_features, negative_cropped_img_features)
+            # triplet_total_loss = loss_triplet3 + loss_triplet4
                         
             
-            total_loss = total_loss + 10*triplet_total_loss
+            # total_loss = total_loss + 10*triplet_total_loss
 
         if scaler is not None:
             scaler.scale(total_loss).backward()
+
             if args.horovod:
                 optimizer.synchronize()
                 scaler.unscale_(optimizer)
                 if args.norm_gradient_clip is not None:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), args.norm_gradient_clip, norm_type=2.0)
+                # torch.nn.utils.clip_grad_norm_(hnet.parameters(), 5.0, norm_type=2.0)
                 with optimizer.skip_synchronize():
                     scaler.step(optimizer)
             else:
                 if args.norm_gradient_clip is not None:
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), args.norm_gradient_clip, norm_type=2.0)
+                # torch.nn.utils.clip_grad_norm_(hnet.parameters(), 5.0, norm_type=2.0)
                 scaler.step(optimizer)
             scaler.update()
         else:
             total_loss.backward()
+            #print sum of gradients of hnet
+
             if args.norm_gradient_clip is not None:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.norm_gradient_clip, norm_type=2.0)
+            # torch.nn.utils.clip_grad_norm_(hnet.parameters(), 5.0, norm_type=2.0)
             optimizer.step()
 
         # Note: we clamp to 4.6052 = ln(100), as in the original paper.
@@ -167,7 +180,7 @@ def train_one_epoch(model, hnet, data, epoch, optimizer, scaler, scheduler, args
         batch_time_m.update(time.time() - end)
         end = time.time()
         batch_count = i + 1
-        if is_master(args) and (i % 100 == 0 or batch_count == num_batches_per_epoch):
+        if is_master(args) and (i % 10 == 0 or batch_count == num_batches_per_epoch):
             batch_size = len(images)
             num_samples = batch_count * batch_size * args.world_size
             samples_per_epoch = dataloader.num_samples

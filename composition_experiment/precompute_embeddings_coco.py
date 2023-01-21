@@ -15,7 +15,7 @@ print("Starting Program")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_name = "RN50"
-pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10/checkpoints/epoch_50.pt"
+pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption HNET 200 epoch/checkpoints/epoch_159.pt"
 model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
 model.eval()
 
@@ -121,8 +121,8 @@ train_img_emb_all = np.array(train_img_emb_all)
 train_class_emb_all = np.array(train_class_emb_all) 
 
 #save the embeddings
-np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_train_coco_img_emb.npy", train_img_emb_all) 
-np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_train_coco_target.npy", train_class_emb_all) 
+np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_CLIP COCO Caption HNET 200 epoch_train_coco_img_emb.npy", train_img_emb_all) 
+np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_CLIP COCO Caption HNET 200 epoch_train_coco_target.npy", train_class_emb_all) 
 
 print("Beginning Extracting Test Features")
 
@@ -147,5 +147,5 @@ test_class_emb_all = np.array(test_class_emb_all)
 # np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_{pretrained}_test_coco_target.npy", test_class_emb_all) # 10x513
 
 #save the embeddings
-np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_test_coco_img_emb.npy", test_img_emb_all)
-np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_COCO Caption TripletLoss(1 + 2 + 3 + 4) + ClipLoss - lambda=10_test_coco_target.npy", test_class_emb_all) # 10x513
+np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_CLIP COCO Caption HNET 200 epoch_test_coco_img_emb.npy", test_img_emb_all)
+np.save(f"/scratch/mp5847/precomputed_embeddings_comp_exp/{model_name}_CLIP COCO Caption HNET 200 epoch_test_coco_target.npy", test_class_emb_all) # 10x513
