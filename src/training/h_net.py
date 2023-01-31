@@ -15,11 +15,11 @@ class Mike_net_dnn(nn.Module):
         self.linear4 = nn.Linear(embedding_dim, 1)
 
     def forward(self, X1, X2):
-        linear1 = Func.relu(self.bn1(self.linear1a(X1) + self.linear1b(X2)))# + self.linear1b(X1*X2)))
-        linear2 = Func.relu(self.bn2(self.linear2(linear1)))
-        linear3 = Func.relu(self.bn3(self.linear3(linear2)))
-        # linear4 = torch.sigmoid(self.linear4(linear3))
-        linear4 = self.linear4(linear3)
+        # linear1 = Func.relu(self.bn1(self.linear1a(X1) + self.linear1b(X2) + self.linear1b(X1*X2)))
+        # linear2 = Func.relu(self.bn2(self.linear2(linear1)))
+        # linear3 = Func.relu(self.bn3(self.linear3(linear2)))
+        # # linear4 = torch.sigmoid(self.linear4(linear3))
+        # linear4 = self.linear4(linear3)
         return linear4
 
 class Mike_net_linear_fc(nn.Module):
@@ -32,7 +32,8 @@ class Mike_net_linear_fc(nn.Module):
 
     def forward(self, X1, X2):
         linear1 = Func.relu(self.bn1(self.linear1a(X1) + self.linear1b(X2)))# + self.linear1b(X1*X2)))
-        linear4 = torch.sigmoid(self.linear4(linear1))
+        # linear4 = torch.sigmoid(self.linear4(linear1))
+        linear4 = self.linear4(linear1)
         return linear4
 
 class Mike_net_linear(nn.Module):
@@ -44,9 +45,9 @@ class Mike_net_linear(nn.Module):
         self.linear4 = nn.Linear(embedding_dim, 1)
 
     def forward(self, X1, X2):
-        linear1 = Func.relu(self.linear1(torch.cat((X1, X2), dim=1)))
+        linear1 = Func.relu(self.linear1(torch.cat([X1, X2], dim=1)))
         linear2 = Func.relu(self.linear2(linear1))
         linear3 = Func.relu(self.linear3(linear2))
+        # linear4 = torch.sigmoid(self.linear4(linear3))
         linear4 = self.linear4(linear3)
-
         return linear4

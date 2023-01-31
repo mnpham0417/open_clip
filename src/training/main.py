@@ -186,8 +186,8 @@ def main():
             [
                 {"params": gain_or_bias_params, "weight_decay": 0.},
                 {"params": rest_params, "weight_decay": args.wd},
-                {"params": list(hnet.parameters()), "weight_decay": 0.},
-            ],
+                {"params": hnet.parameters(), "weight_decay": 0.},
+            ] ,
             lr=args.lr,
             betas=(args.beta1, args.beta2),
             eps=args.eps,

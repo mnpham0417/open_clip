@@ -10,6 +10,7 @@ import torch.nn as nn
 import copy
 import wandb
 from training.h_net import *
+from sklearn.metrics import classification_report
 
 def accuracy(pred, target):
     '''
@@ -30,8 +31,8 @@ print("Starting Program")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_name = "RN50"
-pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption HNET x 2/checkpoints/epoch_117.pt"
-pretrained_hnet = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption HNET x 2/checkpoints/hnet_epoch_117.pt"
+pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption HNET 200 epoch/checkpoints/epoch_200.pt"
+pretrained_hnet = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption HNET 200 epoch/checkpoints/hnet_epoch_200.pt"
 model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
 hnet = Mike_net_linear(1024)
 hnet.load_state_dict(torch.load(pretrained_hnet))
@@ -51,7 +52,7 @@ class_all = []
 class_all_index = {}
 for i in coco_test.coco.cats.keys():
     class_all.append("a photo of " + coco_test.coco.cats[i]['name'])
-    class_all_index[coco_test.coco.cats[i]['name']] = i
+    class_all_index["a photo of " + coco_test.coco.cats[i]['name']] = i
 
 text = open_clip.tokenize(class_all).to(device)
 text_features = model.encode_text(text)
@@ -62,6 +63,8 @@ text_features = text_features.to(device)
 total_acc = 0
 count = 0
 not_found_count = 0
+pred_all = []
+target_all = []
 
 with torch.no_grad():
     for i, (img, target) in enumerate(tqdm(coco_test)):
@@ -75,6 +78,7 @@ with torch.no_grad():
 
         img_features = model.encode_image(img) # 
         img_features /= img_features.norm(dim=-1, keepdim=True) 
+        img_features = img_features.to(device)
         
         #repeat img_features
         img_features = img_features.repeat(text_features.shape[0], 1)
@@ -84,12 +88,21 @@ with torch.no_grad():
         #get top len(class_name) predictions
         top_pred = torch.topk(score_hnet, len(class_name))[1] # 1xlen(class_name)
         top_pred_class = [class_all[i] for i in top_pred] # 1xlen(class_name)
+
         try:
-            accuracy_score = accuracy(top_pred_class, class_name) 
+            accuracy_score = accuracy(top_pred_class, class_name) # 1x1
+            
+            pred_all.extend([class_all_index[class_name] for class_name in top_pred_class])
+            target_all.extend([class_all_index[class_name] for class_name in class_name])
+            total_acc += accuracy_score
             count += 1
-        except:
+        except Exception as e:
+            # print(e)
             not_found_count += 1
-        total_acc += accuracy_score
+        
     
+    print(model_name, pretrained)
+    print(count, not_found_count)
     print("Average accuracy: ", total_acc / count) # 1x1
     print("Not found count: ", not_found_count) # 1x1
+    print(classification_report(target_all, pred_all))

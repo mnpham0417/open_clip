@@ -9,13 +9,13 @@ python3 -m training.main \
             --csv-caption-key caption \
             --warmup 2000 \
             --batch-size=128 \
-            --lr=1e-4 \
+            --lr=0.0001 \
             --wd=0.1 \
             --epochs=200 \
-            --workers=6 \
+            --workers=12 \
             --model RN50 \
             --report-to wandb \
-            --name 'CLIP RN50 COCO Caption HNET x 1' \
+            --name 'CLIP RN50 COCO Caption HNET 200 epoch' \
             --csv-separator ',' \
             --logs /scratch/mp5847/open-clip/logs  \
             --coco_instances_train_path '/coco/annotations/instances_train2017.json' \
