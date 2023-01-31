@@ -38,8 +38,15 @@ class Mike_net_linear_fc(nn.Module):
 class Mike_net_linear(nn.Module):
     def __init__(self, embedding_dim):
         super(Mike_net_linear, self).__init__()
-        self.linear4 = nn.Linear(embedding_dim*2, 1)
+        self.linear1 = nn.Linear(embedding_dim*2, embedding_dim)
+        self.linear2 = nn.Linear(embedding_dim, embedding_dim)
+        self.linear3 = nn.Linear(embedding_dim, embedding_dim)
+        self.linear4 = nn.Linear(embedding_dim, 1)
 
     def forward(self, X1, X2):
-        linear4 = torch.sigmoid(self.linear4(torch.cat([X1, X2], 1)))
+        linear1 = Func.relu(self.linear1(torch.cat((X1, X2), dim=1)))
+        linear2 = Func.relu(self.linear2(linear1))
+        linear3 = Func.relu(self.linear3(linear2))
+        linear4 = self.linear4(linear3)
+
         return linear4

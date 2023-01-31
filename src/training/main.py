@@ -132,7 +132,7 @@ def main():
     )
 
     #initialize hnet
-    hnet = Mike_net_dnn(1024).to(device)
+    hnet = Mike_net_linear(1024).to(device)
 
     random_seed(args.seed, args.rank)
 
@@ -292,11 +292,11 @@ def main():
                     os.path.join(args.checkpoint_path, f"epoch_{completed_epoch}.pt"),
                 )
                 
-                #save hnet
-                # torch.save(
-                #     hnet.state_dict(),
-                #     os.path.join(args.checkpoint_path, f"hnet_epoch_{completed_epoch}.pt"),
-                # )
+                # save hnet
+                torch.save(
+                    hnet.state_dict(),
+                    os.path.join(args.checkpoint_path, f"hnet_epoch_{completed_epoch}.pt"),
+                )
             if args.save_most_recent:
                 torch.save(
                     checkpoint_dict,

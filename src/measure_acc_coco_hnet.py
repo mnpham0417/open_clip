@@ -30,10 +30,10 @@ print("Starting Program")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_name = "RN50"
-pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption Comp Loss 3 + 4 + 5 + 6/checkpoints/epoch_29.pt"
-pretrained_hnet = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption Comp Loss 3 + 4 + 5 + 6/checkpoints/hnet_epoch_29.pt"
+pretrained = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption HNET x 2/checkpoints/epoch_117.pt"
+pretrained_hnet = "/scratch/mp5847/open-clip/logs/CLIP RN50 COCO Caption HNET x 2/checkpoints/hnet_epoch_117.pt"
 model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained, device=device)
-hnet = Mike_net_dnn(1024)
+hnet = Mike_net_linear(1024)
 hnet.load_state_dict(torch.load(pretrained_hnet))
 hnet.to(device)
 hnet.eval()
